@@ -40,7 +40,11 @@
   // Per-pod bandwidth / packet queries (table + timeseries)
   receiveBandwidth(config):: |||
     sum by (pod) (
-        (%(multiplier)s * rate(container_network_receive_bytes_total{%(clusterLabel)s="$cluster",namespace=~"$namespace"}[%(grafanaIntervalVar)s]))
+      (
+        sum by (%(clusterLabel)s,namespace,pod) (
+          %(multiplier)s * rate(container_network_receive_bytes_total{%(clusterLabel)s="$cluster",namespace=~"$namespace"}[%(grafanaIntervalVar)s])
+        )
+      )
       * on (%(clusterLabel)s,namespace,pod) group_left ()
         topk by (%(clusterLabel)s,namespace,pod) (
           1,
