@@ -1,0 +1,66 @@
+rule_files: []
+evaluation_interval: 1m
+
+tests:
+  - name: receive bandwidth query equivalence
+    interval: 1m
+
+    input_series:
+      - series: 'container_network_receive_bytes_total{cluster="c1",namespace="ns1",pod="p1",interface="eth0"}'
+        values: '0+60x5'
+      - series: 'container_network_receive_bytes_total{cluster="c1",namespace="ns1",pod="p1",interface="eth1"}'
+        values: '0+120x5'
+      - series: 'container_network_receive_bytes_total{cluster="c1",namespace="ns2",pod="p1",interface="eth0"}'
+        values: '0+240x5'
+      - series: 'container_network_receive_bytes_total{cluster="c1",namespace="ns1",pod="p2",interface="eth0"}'
+        values: '0+300x5'
+      - series: 'container_network_receive_bytes_total{cluster="c1",namespace="ns1",pod="p3",interface="eth0"}'
+        values: '0+600x5'
+
+      - series: 'kube_pod_info{cluster="c1",namespace="ns1",pod="p1",host_network="false"}'
+        values: '1+0x5'
+      - series: 'kube_pod_info{cluster="c1",namespace="ns2",pod="p1",host_network="false"}'
+        values: '1+0x5'
+      - series: 'kube_pod_info{cluster="c1",namespace="ns1",pod="p2",host_network="false"}'
+        values: '1+0x5'
+      - series: 'kube_pod_info{cluster="c1",namespace="ns1",pod="p3",host_network="true"}'
+        values: '1+0x5'
+
+    promql_expr_test:
+      - expr: |
+          sum by (pod) (
+            rate(container_network_receive_bytes_total{cluster="c1",namespace=~".+"}[5m])
+            * on (cluster,namespace,pod) group_left()
+            topk by (cluster,namespace,pod) (
+              1,
+              max by (cluster,namespace,pod) (
+                kube_pod_info{host_network="false"}
+              )
+            )
+          )
+        eval_time: 5m
+        exp_samples:
+          - labels: '{pod="p1"}'
+            value: 7
+          - labels: '{pod="p2"}'
+            value: 5
+
+      - expr: |
+          sum by (pod) (
+            sum by (cluster,namespace,pod) (
+              rate(container_network_receive_bytes_total{cluster="c1",namespace=~".+"}[5m])
+            )
+            * on (cluster,namespace,pod) group_left()
+            topk by (cluster,namespace,pod) (
+              1,
+              max by (cluster,namespace,pod) (
+                kube_pod_info{host_network="false"}
+              )
+            )
+          )
+        eval_time: 5m
+        exp_samples:
+          - labels: '{pod="p1"}'
+            value: 7
+          - labels: '{pod="p2"}'
+            value: 5
